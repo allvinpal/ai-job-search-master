@@ -56,22 +56,46 @@ const server = Bun.serve({
       args.push("--format", "json")
 
       try {
-        const proc = Bun.spawn(["bun", "run", CLI_PATH, ...args], {
-          stdout: "pipe",
-          stderr: "pipe",
-          cwd: resolve(UI_DIR, ".."),
-        })
-        const stdout = await new Response(proc.stdout).text()
-        const stderr = await new Response(proc.stderr).text()
-        const exitCode = await proc.exited
+        const { runSearch } = await import("../cli/src/commands/search.js")
+        let output = ""
+        const originalStdoutWrite = process.stdout.write
+        const originalStderrWrite = process.stderr.write
+
+        process.stdout.write = ((chunk: any) => {
+          output += typeof chunk === "string" ? chunk : chunk.toString()
+          return true
+        }) as any
+
+        let errOutput = ""
+        process.stderr.write = ((chunk: any) => {
+          errOutput += typeof chunk === "string" ? chunk : chunk.toString()
+          return true
+        }) as any
+
+        let exitCode = 0
+        try {
+          exitCode = await runSearch({
+            query: q || undefined,
+            location: l || undefined,
+            experience: exp ? parseInt(exp, 10) : undefined,
+            jobage: jobage ? parseInt(jobage, 10) : undefined,
+            remote: remote || undefined,
+            page: page ? parseInt(page, 10) : 1,
+            limit: limit ? parseInt(limit, 10) : 20,
+            format: "json",
+          })
+        } finally {
+          process.stdout.write = originalStdoutWrite
+          process.stderr.write = originalStderrWrite
+        }
 
         if (exitCode !== 0) {
           return new Response(
-            stderr || JSON.stringify({ error: "Search failed", code: "CLI_ERROR" }),
+            errOutput || JSON.stringify({ error: "Search failed", code: "CLI_ERROR" }),
             { status: 502, headers: { "Content-Type": "application/json", ...corsHeaders } },
           )
         }
-        return new Response(stdout, {
+        return new Response(output, {
           headers: { "Content-Type": "application/json", ...corsHeaders },
         })
       } catch (e: any) {
