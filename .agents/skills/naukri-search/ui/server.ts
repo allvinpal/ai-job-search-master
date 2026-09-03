@@ -9,20 +9,23 @@ import { readFileSync } from "fs"
 import { resolve, dirname } from "path"
 
 const PORT = parseInt(process.env.PORT || "3456", 10)
-const UI_DIR = dirname(new URL(import.meta.url).pathname)
-const CLI_PATH = resolve(UI_DIR, "../cli/src/cli.ts")
 
-// Windows: Bun's import.meta.url may produce /C:/... — strip leading / on Win paths
-function fixWinPath(p: string): string {
-  if (process.platform === "win32" && /^\/[A-Z]:/.test(p)) return p.slice(1)
+// Resolve paths - handle both Unix and Windows
+function getFilePath(importUrl: string): string {
+  let p = new URL(importUrl).pathname
+  // Windows: strip leading / from /C:/...
+  if (process.platform === "win32" && /^\/[A-Z]:/.test(p)) p = p.slice(1)
   return p
 }
+
+const UI_DIR = dirname(getFilePath(import.meta.url))
+const CLI_PATH = resolve(UI_DIR, "../cli/src/cli.ts")
 
 const server = Bun.serve({
   port: PORT,
   async fetch(req) {
     const url = new URL(req.url)
-    const corsHeaders = {
+    const corsHeaders: Record<string, string> = {
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type",
@@ -53,28 +56,29 @@ const server = Bun.serve({
       args.push("--format", "json")
 
       try {
-        const proc = Bun.spawn(["bun", "run", fixWinPath(CLI_PATH), ...args], {
+        const proc = Bun.spawn(["bun", "run", CLI_PATH, ...args], {
           stdout: "pipe",
           stderr: "pipe",
+          cwd: resolve(UI_DIR, ".."),
         })
         const stdout = await new Response(proc.stdout).text()
         const stderr = await new Response(proc.stderr).text()
         const exitCode = await proc.exited
 
         if (exitCode !== 0) {
-          return new Response(stderr || JSON.stringify({ error: "Search failed", code: "CLI_ERROR" }), {
-            status: 502,
-            headers: { "Content-Type": "application/json", ...corsHeaders },
-          })
+          return new Response(
+            stderr || JSON.stringify({ error: "Search failed", code: "CLI_ERROR" }),
+            { status: 502, headers: { "Content-Type": "application/json", ...corsHeaders } },
+          )
         }
         return new Response(stdout, {
           headers: { "Content-Type": "application/json", ...corsHeaders },
         })
       } catch (e: any) {
-        return new Response(JSON.stringify({ error: e.message, code: "SERVER_ERROR" }), {
-          status: 500,
-          headers: { "Content-Type": "application/json", ...corsHeaders },
-        })
+        return new Response(
+          JSON.stringify({ error: e.message, code: "SERVER_ERROR" }),
+          { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } },
+        )
       }
     }
 
@@ -82,42 +86,42 @@ const server = Bun.serve({
     if (url.pathname === "/api/detail") {
       const jobUrl = url.searchParams.get("url")
       if (!jobUrl) {
-        return new Response(JSON.stringify({ error: "url parameter required", code: "NO_URL" }), {
-          status: 400,
-          headers: { "Content-Type": "application/json", ...corsHeaders },
-        })
+        return new Response(
+          JSON.stringify({ error: "url parameter required", code: "NO_URL" }),
+          { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } },
+        )
       }
 
       try {
-        const proc = Bun.spawn(["bun", "run", fixWinPath(CLI_PATH), "detail", jobUrl, "--format", "json"], {
-          stdout: "pipe",
-          stderr: "pipe",
-        })
+        const proc = Bun.spawn(
+          ["bun", "run", CLI_PATH, "detail", jobUrl, "--format", "json"],
+          { stdout: "pipe", stderr: "pipe", cwd: resolve(UI_DIR, "..") },
+        )
         const stdout = await new Response(proc.stdout).text()
         const stderr = await new Response(proc.stderr).text()
         const exitCode = await proc.exited
 
         if (exitCode !== 0) {
-          return new Response(stderr || JSON.stringify({ error: "Detail fetch failed", code: "CLI_ERROR" }), {
-            status: 502,
-            headers: { "Content-Type": "application/json", ...corsHeaders },
-          })
+          return new Response(
+            stderr || JSON.stringify({ error: "Detail fetch failed", code: "CLI_ERROR" }),
+            { status: 502, headers: { "Content-Type": "application/json", ...corsHeaders } },
+          )
         }
         return new Response(stdout, {
           headers: { "Content-Type": "application/json", ...corsHeaders },
         })
       } catch (e: any) {
-        return new Response(JSON.stringify({ error: e.message, code: "SERVER_ERROR" }), {
-          status: 500,
-          headers: { "Content-Type": "application/json", ...corsHeaders },
-        })
+        return new Response(
+          JSON.stringify({ error: e.message, code: "SERVER_ERROR" }),
+          { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } },
+        )
       }
     }
 
     // Serve static UI
     if (url.pathname === "/" || url.pathname === "/index.html") {
       try {
-        const html = readFileSync(resolve(fixWinPath(UI_DIR), "index.html"), "utf-8")
+        const html = readFileSync(resolve(UI_DIR, "index.html"), "utf-8")
         return new Response(html, {
           headers: { "Content-Type": "text/html; charset=utf-8", ...corsHeaders },
         })
