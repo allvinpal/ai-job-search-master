@@ -1,5 +1,5 @@
 import {
-  searchViaGoogle,
+  searchViaDuckDuckGo,
   buildNaukriUrl,
   writeError,
   type JobCard,
@@ -19,16 +19,13 @@ export interface SearchOpts {
 function renderTable(cards: JobCard[]): string {
   if (cards.length === 0) return "No results."
   const rows = cards.map((c) => {
-    const title = (c.title || "").slice(0, 40).padEnd(40)
-    const company = (c.company || "—").slice(0, 22).padEnd(22)
+    const title = (c.title || "").slice(0, 45).padEnd(45)
     const loc = (c.location || "—").slice(0, 18).padEnd(18)
-    const exp = (c.experience || "—").slice(0, 10).padEnd(10)
-    return `${title} ${company} ${loc} ${exp}`
+    const exp = (c.experience || "—").slice(0, 12).padEnd(12)
+    return `${title} ${loc} ${exp}`
   })
   const header =
-    "TITLE".padEnd(40) +
-    " " +
-    "COMPANY".padEnd(22) +
+    "TITLE".padEnd(45) +
     " " +
     "LOCATION".padEnd(18) +
     " EXP"
@@ -37,7 +34,7 @@ function renderTable(cards: JobCard[]): string {
 
 export async function runSearch(opts: SearchOpts): Promise<number> {
   try {
-    let cards = await searchViaGoogle({
+    let cards = await searchViaDuckDuckGo({
       query: opts.query,
       location: opts.location,
       experience: opts.experience,
@@ -48,7 +45,7 @@ export async function runSearch(opts: SearchOpts): Promise<number> {
 
     if (opts.limit !== undefined && opts.limit >= 0) cards = cards.slice(0, opts.limit)
 
-    // Also provide the direct Naukri search URL for the user
+    // Direct Naukri search URL for the user to open in browser
     const naukriUrl = buildNaukriUrl({
       query: opts.query,
       location: opts.location,
@@ -59,19 +56,17 @@ export async function runSearch(opts: SearchOpts): Promise<number> {
 
     if (opts.format === "table") {
       process.stdout.write(renderTable(cards) + "\n")
-      if (cards.length > 0) {
-        process.stdout.write(`\nDirect Naukri search: ${naukriUrl}\n`)
-      }
+      process.stdout.write(`\n📋 Open full results on Naukri: ${naukriUrl}\n`)
     } else if (opts.format === "plain") {
       process.stdout.write(
         cards
           .map(
             (c) =>
-              `${c.title}\n  ${c.company || "—"} · ${c.location || "—"} · ${c.experience || "—"}\n  ${c.description ? c.description.slice(0, 200) : "—"}\n  ${c.url}`,
+              `${c.title}\n  ${c.location || "—"} · ${c.experience || "—"}\n  ${c.description ? c.description.slice(0, 200) : "—"}\n  ${c.url}`,
           )
           .join("\n\n") + "\n",
       )
-      process.stdout.write(`\nDirect Naukri search: ${naukriUrl}\n`)
+      process.stdout.write(`\n📋 Open full results on Naukri: ${naukriUrl}\n`)
     } else {
       process.stdout.write(
         JSON.stringify(
