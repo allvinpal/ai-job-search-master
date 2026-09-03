@@ -1,7 +1,6 @@
 import {
-  apiFetch,
-  buildSearchUrl,
-  parseApiResults,
+  searchViaGoogle,
+  buildNaukriUrl,
   writeError,
   type JobCard,
 } from "../helpers.js"
@@ -20,55 +19,59 @@ export interface SearchOpts {
 function renderTable(cards: JobCard[]): string {
   if (cards.length === 0) return "No results."
   const rows = cards.map((c) => {
-    const title = (c.title || "").slice(0, 38).padEnd(38)
+    const title = (c.title || "").slice(0, 40).padEnd(40)
     const company = (c.company || "—").slice(0, 22).padEnd(22)
     const loc = (c.location || "—").slice(0, 18).padEnd(18)
     const exp = (c.experience || "—").slice(0, 10).padEnd(10)
-    const salary = (c.salary || "—").slice(0, 16).padEnd(16)
-    const skills = (c.skills || []).slice(0, 3).join(", ").slice(0, 30)
-    return `${title} ${company} ${loc} ${exp} ${salary} ${skills}`
+    return `${title} ${company} ${loc} ${exp}`
   })
   const header =
-    "TITLE".padEnd(38) +
+    "TITLE".padEnd(40) +
     " " +
     "COMPANY".padEnd(22) +
     " " +
     "LOCATION".padEnd(18) +
-    " " +
-    "EXP".padEnd(10) +
-    " " +
-    "SALARY".padEnd(16) +
-    " SKILLS"
+    " EXP"
   return [header, "-".repeat(header.length + 10), ...rows].join("\n")
 }
 
 export async function runSearch(opts: SearchOpts): Promise<number> {
   try {
-    const url = buildSearchUrl({
+    let cards = await searchViaGoogle({
       query: opts.query,
       location: opts.location,
       experience: opts.experience,
       jobage: opts.jobage,
       remote: opts.remote,
-      page: opts.page,
       limit: opts.limit,
     })
 
-    const data = await apiFetch(url)
-    let cards = parseApiResults(data)
     if (opts.limit !== undefined && opts.limit >= 0) cards = cards.slice(0, opts.limit)
+
+    // Also provide the direct Naukri search URL for the user
+    const naukriUrl = buildNaukriUrl({
+      query: opts.query,
+      location: opts.location,
+      experience: opts.experience,
+      jobage: opts.jobage,
+      remote: opts.remote,
+    })
 
     if (opts.format === "table") {
       process.stdout.write(renderTable(cards) + "\n")
+      if (cards.length > 0) {
+        process.stdout.write(`\nDirect Naukri search: ${naukriUrl}\n`)
+      }
     } else if (opts.format === "plain") {
       process.stdout.write(
         cards
           .map(
             (c) =>
-              `${c.title}\n  ${c.company || "—"} · ${c.location || "—"} · ${c.experience || "—"} · ${c.salary || "Not disclosed"}\n  Skills: ${c.skills.join(", ") || "—"}\n  ${c.url}`,
+              `${c.title}\n  ${c.company || "—"} · ${c.location || "—"} · ${c.experience || "—"}\n  ${c.description ? c.description.slice(0, 200) : "—"}\n  ${c.url}`,
           )
           .join("\n\n") + "\n",
       )
+      process.stdout.write(`\nDirect Naukri search: ${naukriUrl}\n`)
     } else {
       process.stdout.write(
         JSON.stringify(
@@ -78,6 +81,7 @@ export async function runSearch(opts: SearchOpts): Promise<number> {
               page: opts.page,
               query: opts.query || null,
               location: opts.location || null,
+              naukriUrl,
             },
             results: cards,
           },
